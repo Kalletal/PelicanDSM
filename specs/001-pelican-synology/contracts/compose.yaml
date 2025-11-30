@@ -1,0 +1,77 @@
+# Pelican Panel Docker Compose Configuration
+# For Synology DSM 7.2+ with Container Manager
+# Version: 1.0.0-beta28
+
+services:
+  panel:
+    image: ghcr.io/pelican-dev/panel:latest
+    container_name: pelican_panel-panel-1
+    restart: unless-stopped
+
+    ports:
+      - "${PANEL_PORT:-8080}:8080"
+      - "${PANEL_HTTPS_PORT:-8443}:443"
+
+    extra_hosts:
+      # Required for Wings to communicate with Panel on same host
+      - "host.docker.internal:host-gateway"
+
+    volumes:
+      # Persistent data (SQLite DB, uploads, cache)
+      - ${DATA_ROOT}/pelican-data:/pelican-data
+      # Application logs
+      - ${DATA_ROOT}/pelican-logs:/var/www/html/storage/logs
+
+    environment:
+      # Data location (required for Pelican)
+      XDG_DATA_HOME: /pelican-data
+
+      # Application settings
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: "${APP_URL}"
+      APP_LOCALE: "${APP_LOCALE:-fr}"
+      APP_TIMEZONE: "${APP_TIMEZONE:-Europe/Paris}"
+
+      # Admin setup (used by installer)
+      ADMIN_EMAIL: "${ADMIN_EMAIL}"
+
+      # Session/Cookie (false for HTTP, true with reverse proxy HTTPS)
+      SESSION_SECURE_COOKIE: "false"
+
+      # Trust all proxies (DSM reverse proxy)
+      TRUSTED_PROXIES: "*"
+
+      # Mail (optional, can configure in admin panel)
+      MAIL_DRIVER: "${MAIL_DRIVER:-log}"
+      MAIL_HOST: "${MAIL_HOST:-}"
+      MAIL_PORT: "${MAIL_PORT:-587}"
+      MAIL_FROM: "${MAIL_FROM:-}"
+      MAIL_USERNAME: "${MAIL_USERNAME:-}"
+      MAIL_PASSWORD: "${MAIL_PASSWORD:-}"
+      MAIL_ENCRYPTION: "${MAIL_ENCRYPTION:-tls}"
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  default:
+    name: pelican_network
+    driver: bridge
+
+# Named volumes (managed by Docker)
+volumes:
+  pelican-data:
+    driver: local
+  pelican-logs:
+    driver: local

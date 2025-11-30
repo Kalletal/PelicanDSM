@@ -1,0 +1,119 @@
+# ===========================================
+# Pelican Wings - Configuration
+# ===========================================
+# Ce fichier est un template. Copiez la configuration générée
+# par le Panel (Admin -> Nodes -> [Node] -> Configuration) ici.
+#
+# Après modification, utilisez "Configurer Wings" dans Package Center
+# pour appliquer et redémarrer Wings.
+
+debug: false
+
+# --- System Settings ---
+system:
+  # Répertoire de données Wings
+  data: /var/packages/pelican_panel/var/data/wings
+
+  # Répertoire des archives/backups
+  archive_directory: /var/packages/pelican_panel/var/data/backups
+
+  # Utilisateur système du package
+  username: sc-pelican_panel
+
+  # Fuseau horaire
+  timezone: Europe/Paris
+
+  # Limite de taille des fichiers téléchargeables (bytes)
+  # 100MB par défaut
+  max_upload_size: 104857600
+
+# --- API Settings ---
+api:
+  host: 0.0.0.0
+  port: 8443
+
+  # SSL/TLS - Désactivé car géré par reverse proxy DSM
+  ssl:
+    enabled: false
+    # Si vous activez SSL directement sur Wings:
+    # cert: /etc/letsencrypt/live/domain.com/fullchain.pem
+    # key: /etc/letsencrypt/live/domain.com/privkey.pem
+
+  # Timeouts
+  upload_limit: 100
+
+# --- Panel Connection ---
+# IMPORTANT: Remplacez ces valeurs par celles du Panel
+# Admin -> Nodes -> [Votre Node] -> Configuration
+panel:
+  # URL du Panel (avec protocole et port)
+  url: "http://NAS_IP:8080"
+
+  # Token ID (format: peli-xxxxx)
+  token_id: "CHANGEME_TOKEN_ID"
+
+  # Token secret
+  token: "CHANGEME_TOKEN"
+
+# --- Remote Query ---
+remote_query:
+  # Temps max pour les requêtes vers le Panel
+  timeout: 30
+
+  # Intervalle entre les vérifications d'état
+  boot_servers_per_page: 50
+
+# --- Docker Settings ---
+docker:
+  # Socket Docker Synology
+  socket: /var/run/docker.sock
+
+  # Réseau pour les conteneurs de jeux
+  # IMPORTANT: Utiliser une plage IP qui ne chevauche pas les réseaux existants
+  network:
+    interface: 172.20.0.1
+    dns:
+      - 1.1.1.1
+      - 1.0.0.1
+    name: pelican0
+    ispn: false
+    driver: bridge
+    network_mode: pelican0
+    is_internal: false
+    enable_icc: true
+    network_mtu: 1500
+    interfaces:
+      v4:
+        subnet: 172.20.0.0/16
+        gateway: 172.20.0.1
+
+  # Timeouts conteneurs
+  container_stop_timeout: 10
+
+# --- SFTP Server ---
+sftp:
+  # Port SFTP pour accès aux fichiers des serveurs
+  bind_port: 2022
+
+  # Timeouts
+  read_timeout: 30
+  write_timeout: 30
+
+# --- Allowed Mounts ---
+# Chemins autorisés pour les bind mounts des serveurs de jeux
+allowed_mounts:
+  - /var/packages/pelican_panel/var/data
+  - /volume1
+
+# --- Throttles ---
+# Limites pour éviter la surcharge
+throttles:
+  # Limite de lignes de log par seconde
+  lines: 2000
+  # Période en millisecondes
+  period: 100
+
+# --- Installer ---
+installer:
+  # Chemin pour les téléchargements d'installation
+  local_download_path: /var/packages/pelican_panel/var/data/temp

@@ -1,0 +1,115 @@
+{
+  "name": "Pelican Panel Installation Wizard",
+  "version": "1.0",
+  "description": "Wizard configuration for SPK installation on DSM 7.2+",
+  "steps": [
+    {
+      "step": 1,
+      "title": "Configuration du Panel",
+      "description": "Paramètres d'accès au Panel Pelican",
+      "fields": [
+        {
+          "id": "wizard_host",
+          "type": "textfield",
+          "label": "Adresse du NAS",
+          "description": "Adresse IP ou nom de domaine pour accéder au Panel",
+          "placeholder": "192.168.1.100 ou nas.local",
+          "required": true,
+          "validation": {
+            "pattern": "^[a-zA-Z0-9.-]+$",
+            "message": "Format invalide. Utilisez une adresse IP ou un nom de domaine."
+          }
+        },
+        {
+          "id": "wizard_port",
+          "type": "number",
+          "label": "Port HTTP",
+          "description": "Port d'accès au Panel (défaut: 8080)",
+          "default": 8080,
+          "min": 1,
+          "max": 65535,
+          "required": true
+        },
+        {
+          "id": "wizard_app_url",
+          "type": "computed",
+          "formula": "http://${wizard_host}:${wizard_port}",
+          "description": "URL finale du Panel"
+        }
+      ]
+    },
+    {
+      "step": 2,
+      "title": "Compte Administrateur",
+      "description": "Configuration du premier administrateur",
+      "fields": [
+        {
+          "id": "wizard_admin_email",
+          "type": "email",
+          "label": "Email administrateur",
+          "description": "Adresse email pour le compte admin et les notifications",
+          "placeholder": "admin@example.com",
+          "required": true,
+          "validation": {
+            "pattern": "^[^@]+@[^@]+\\.[^@]+$",
+            "message": "Format email invalide"
+          }
+        },
+        {
+          "id": "wizard_locale",
+          "type": "select",
+          "label": "Langue de l'interface",
+          "description": "Langue par défaut du Panel (modifiable ensuite)",
+          "default": "fr",
+          "options": [
+            {"value": "fr", "label": "Français"},
+            {"value": "en", "label": "English"}
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "step": 3,
+      "title": "Prérequis et Informations",
+      "description": "Vérification des prérequis système",
+      "type": "info",
+      "content": {
+        "title": "Avant de continuer",
+        "sections": [
+          {
+            "heading": "Prérequis",
+            "items": [
+              "Container Manager installé et démarré",
+              "Connexion Internet pour télécharger les images Docker",
+              "Au moins 2 GB de RAM disponible",
+              "Espace disque: ~1 GB pour les images, plus selon les serveurs de jeux"
+            ]
+          },
+          {
+            "heading": "Après l'installation",
+            "items": [
+              "Accédez au Panel à l'adresse configurée",
+              "Complétez l'assistant de configuration web",
+              "Configurez Wings via le bouton 'Configurer Wings' dans Package Center",
+              "Créez votre premier serveur de jeu !"
+            ]
+          },
+          {
+            "heading": "Support",
+            "items": [
+              "Documentation: https://pelican.dev/docs",
+              "Communauté: Discord Pelican Panel"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "environment_mapping": {
+    "APP_URL": "${wizard_app_url}",
+    "APP_LOCALE": "${wizard_locale}",
+    "ADMIN_EMAIL": "${wizard_admin_email}",
+    "PANEL_PORT": "${wizard_port}"
+  }
+}
