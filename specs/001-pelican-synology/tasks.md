@@ -69,11 +69,11 @@
 
 **Purpose**: Icônes et fichiers de build
 
-- [ ] T016 Créer placeholder pour `spk/pelican/src/app/images/` (icônes 16/24/32/48/64/72/256 px)
-- [ ] T017 Créer placeholder pour `spk/pelican/src/PACKAGE_ICON.PNG` et `PACKAGE_ICON_256.PNG`
+- [x] T016 Créer `spk/pelican/src/app/images/` (icônes 16/24/32/48/64/72/256 px)
+- [x] T017 Créer `spk/pelican/src/PACKAGE_ICON.PNG` et `PACKAGE_ICON_256.PNG`
 - [x] T018 Créer `Makefile` racine pour le build du paquet
 
-**Checkpoint**: Projet prêt pour build (en attente des icônes)
+**Checkpoint**: Projet prêt pour build ✅
 
 ---
 
@@ -81,11 +81,11 @@
 
 **Purpose**: Vérification finale et documentation
 
-- [ ] T019 Valider la cohérence entre contracts/ et fichiers SPK créés
-- [ ] T020 Mettre à jour specs/001-pelican-synology/quickstart.md si nécessaire
-- [ ] T021 Marquer la checklist requirements.md comme complète
+- [x] T019 Valider la cohérence entre contracts/ et fichiers SPK créés
+- [x] T020 Mettre à jour specs/001-pelican-synology/quickstart.md si nécessaire
+- [x] T021 Marquer la checklist requirements.md comme complète
 
-**Checkpoint**: Projet validé et documenté
+**Checkpoint**: Projet validé et documenté ✅
 
 ---
 
@@ -167,6 +167,36 @@ Task Group D: "T011 install_uifile" | "T012 uninstall_uifile" | "T013-T015 app/*
 - `spk/pelican/src/wizard/install_uifile`
 - `spk/pelican/src/service-setup.sh`
 
+### 2025-11-30: Wings en conteneur Docker + Interface de configuration
+
+**Problème**: Wings était configuré comme binaire natif mais le binaire n'existait pas. Le bouton "Enregistrer & Redémarrer" restait bloqué sur "Enregistrement...".
+
+**Solutions implémentées**:
+
+1. **Wings en conteneur Docker** (`spk/pelican/src/docker/compose.yaml`):
+   - Ajout du service Wings avec image `ghcr.io/pelican-dev/wings:latest`
+   - Port 8445 pour l'API Wings (évite conflit avec Panel HTTPS 8443)
+   - Port 2022 pour SFTP
+   - Volumes pour config, serveurs, backups et logs
+
+2. **Interface de configuration Wings** (`spk/pelican/src/app/wings-config.html`):
+   - Appels API directs vers le loading-proxy (port 8080) au lieu du CGI DSM
+   - Résout le problème de blocage du bouton de sauvegarde
+
+3. **Configuration réseau Docker** (`spk/pelican/src/wings.config.example.yml`):
+   - Ajout de la configuration réseau avec subnet `172.20.0.0/16`
+   - Évite les conflits d'IP pool avec les réseaux Docker existants
+
+4. **Création des répertoires** (`scripts/package/build-spk.sh`):
+   - Ajout des répertoires `servers`, `backups`, `wings-logs` dans `create_data_dirs()`
+   - Nécessaire pour le démarrage du conteneur Wings
+
+**Fichiers modifiés**:
+- `spk/pelican/src/docker/compose.yaml`
+- `spk/pelican/src/app/wings-config.html`
+- `spk/pelican/src/wings.config.example.yml`
+- `scripts/package/build-spk.sh`
+
 ---
 
 ## Notes
@@ -175,4 +205,5 @@ Task Group D: "T011 install_uifile" | "T012 uninstall_uifile" | "T013-T015 app/*
 - Container Manager (Docker) est la seule dépendance système
 - SQLite simplifie considérablement l'installation par rapport à Pterodactyl
 - Le wizard demande: host, port, email admin, langue
-- Wings sera configuré après l'installation via l'interface DSM
+- Wings est déployé en conteneur Docker et configuré via l'interface DSM
+- Version actuelle: 1.0.0-70
