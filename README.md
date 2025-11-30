@@ -1,6 +1,6 @@
 # Pelican Panel SPK pour Synology DS920+
 
-Paquet SPK permettant d'installer [Pelican Panel](https://pelican.dev/) sur un NAS Synology DS920+ (DSM 7.2+).
+Paquet SPK permettant d'installer [Pelican Panel](https://pelican.dev/) sur un NAS Synology DS920+ (DSM 7.2+ et 7.3+).
 
 ## Fonctionnalités
 
