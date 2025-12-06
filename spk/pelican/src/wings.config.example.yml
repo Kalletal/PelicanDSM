@@ -1,19 +1,23 @@
 # ===========================================
-# Pelican Wings - Configuration (Docker Container)
+# Pelican Wings - Configuration pour Synology
 # ===========================================
-# Ce fichier est un template pour Wings en conteneur Docker.
+# Ce fichier est un template pour Wings en conteneur Docker sur Synology.
 #
-# IMPORTANT: Les chemins ci-dessous sont relatifs au CONTENEUR Docker,
-# pas à l'hôte Synology. Les volumes sont montés ainsi:
-#   - Hôte: /var/packages/pelican_panel/var/data/servers
-#   - Conteneur: /var/lib/pelican/volumes
+# IMPORTANT - Docker-in-Docker:
+# Wings tourne dans un conteneur mais crée des conteneurs de jeux via le socket Docker.
+# Les chemins doivent être des chemins HÔTE (Synology) car Docker les monte depuis l'hôte.
+#
+# Les corrections suivantes sont appliquées AUTOMATIQUEMENT lors de la sauvegarde:
+# - Port API: 8445 → 8080 (port interne du conteneur)
+# - Chemins: /var/lib/pelican/* → /var/packages/pelican_panel/var/data/*
+# - mount_passwd: true → false
+# - tmp_directory: /tmp/pelican → chemin hôte
 #
 # Pour configurer Wings:
 # 1. Créez un Node dans le Panel (Admin -> Nodes -> Create New)
 # 2. Copiez la configuration YAML générée
 # 3. Collez-la via http://IP:8080/wings-config
-#
-# La configuration générée par le Panel remplacera ce fichier.
+# 4. Les corrections sont appliquées automatiquement à l'enregistrement
 
 debug: false
 
@@ -37,8 +41,18 @@ system:
   # Répertoire des logs Wings
   log_directory: /var/packages/pelican_panel/var/data/wings-logs
 
+  # Répertoire temporaire pour les scripts d'installation
+  # IMPORTANT: Doit être un chemin hôte accessible par Docker
+  tmp_directory: /var/packages/pelican_panel/var/data/tmp
+
   # Utilisateur root dans le conteneur Wings
   username: root
+
+  # Configuration utilisateur - mount_passwd doit être false sur Synology
+  user:
+    uid: 0
+    gid: 0
+    mount_passwd: false
 
   # Fuseau horaire
   timezone: Europe/Paris
@@ -132,6 +146,7 @@ sftp:
 allowed_mounts:
   - /var/packages/pelican_panel/var/data/servers
   - /var/packages/pelican_panel/var/data/backups
+  - /var/packages/pelican_panel/var/data/tmp
 
 # --- Throttles ---
 # Limites pour éviter la surcharge
@@ -140,8 +155,3 @@ throttles:
   lines: 2000
   # Période en millisecondes
   period: 100
-
-# --- Installer ---
-installer:
-  # Chemin pour les téléchargements d'installation (dans le conteneur)
-  local_download_path: /tmp/pelican

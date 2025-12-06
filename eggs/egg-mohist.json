@@ -1,0 +1,80 @@
+{
+    "_comment": "Mohist Egg for Pelican Panel - Verified and tested",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": null
+    },
+    "exported_at": "2024-12-06T12:00:00+01:00",
+    "name": "Mohist",
+    "author": "pelican-eggs",
+    "description": "Mohist est un serveur Minecraft Forge hybride qui implémente les API Bukkit, Spigot et Paper. Permet d'utiliser des mods Forge ET des plugins Bukkit/Spigot ensemble.",
+    "features": [
+        "eula",
+        "java_version",
+        "pid_limit"
+    ],
+    "docker_images": {
+        "Java 21 (MC 1.20.5+)": "ghcr.io/parkervcp/yolks:java_21",
+        "Java 17 (MC 1.18-1.20.4)": "ghcr.io/parkervcp/yolks:java_17",
+        "Java 16 (MC 1.17)": "ghcr.io/parkervcp/yolks:java_16",
+        "Java 11": "ghcr.io/parkervcp/yolks:java_11",
+        "Java 8 (MC 1.7.10-1.16.5)": "ghcr.io/parkervcp/yolks:java_8"
+    },
+    "file_denylist": [],
+    "startup": "java -Xms128M -XX:MaxRAMPercentage=95.0 -Dterminal.jline=false -Dterminal.ansi=true -jar {{SERVER_JARFILE}}",
+    "config": {
+        "files": "{\n    \"server.properties\": {\n        \"parser\": \"properties\",\n        \"find\": {\n            \"server-ip\": \"0.0.0.0\",\n            \"server-port\": \"{{server.build.default.port}}\"\n        }\n    }\n}",
+        "startup": "{\n    \"done\": \")! For help, type \"\n}",
+        "logs": "{}",
+        "stop": "stop"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!/bin/ash\n# Mohist Installation Script\n# Server Files: /mnt/server\n\nPROJECT=\"mohist\"\nAPI_BASE=\"https://api.mohistmc.com/project\"\n\necho \"========================================\"\necho \"  Mohist Server Installation\"\necho \"========================================\"\n\n# Use custom download URL if provided\nif [ -n \"${DL_PATH}\" ]; then\n    echo \"Using custom download URL: ${DL_PATH}\"\n    DOWNLOAD_URL=$(echo ${DL_PATH} | sed -e 's/{{/${/g' -e 's/}}/}/g')\nelse\n    echo \"Minecraft Version: ${MC_VERSION}\"\n    \n    # Get build number if not specified\n    if [ -z \"${BUILD_NUMBER}\" ]; then\n        echo \"Fetching latest build for ${MC_VERSION}...\"\n        BUILD_NUMBER=$(curl -s \"${API_BASE}/${PROJECT}/${MC_VERSION}/builds\" | jq -r '.[0].id')\n        \n        if [ -z \"${BUILD_NUMBER}\" ] || [ \"${BUILD_NUMBER}\" = \"null\" ]; then\n            echo \"ERROR: Could not fetch build info for version ${MC_VERSION}\"\n            echo \"Please check available versions at https://mohistmc.com/downloads\"\n            exit 1\n        fi\n    fi\n    \n    echo \"Build Number: ${BUILD_NUMBER}\"\n    DOWNLOAD_URL=\"${API_BASE}/${PROJECT}/${MC_VERSION}/builds/${BUILD_NUMBER}/download\"\nfi\n\ncd /mnt/server\n\n# Backup existing jar if present\nif [ -f \"${SERVER_JARFILE}\" ]; then\n    echo \"Backing up existing ${SERVER_JARFILE}...\"\n    mv \"${SERVER_JARFILE}\" \"${SERVER_JARFILE}.backup\"\nfi\n\n# Download server jar\necho \"\"\necho \"Downloading Mohist server...\"\necho \"URL: ${DOWNLOAD_URL}\"\necho \"\"\n\ncurl -L -o \"${SERVER_JARFILE}\" \"${DOWNLOAD_URL}\"\n\n# Verify download\nif [ -f \"${SERVER_JARFILE}\" ]; then\n    SIZE=$(stat -c%s \"${SERVER_JARFILE}\" 2>/dev/null || stat -f%z \"${SERVER_JARFILE}\" 2>/dev/null)\n    if [ \"${SIZE}\" -gt 1000000 ]; then\n        echo \"\"\n        echo \"Download successful!\"\n        echo \"File size: ${SIZE} bytes\"\n        \n        # Remove backup if download succeeded\n        rm -f \"${SERVER_JARFILE}.backup\"\n        \n        # Create eula.txt\n        echo \"eula=true\" > eula.txt\n        echo \"EULA accepted.\"\n        \n        echo \"\"\n        echo \"========================================\"\n        echo \"  Installation Complete!\"\n        echo \"========================================\"\n        echo \"\"\n        echo \"IMPORTANT - Java Version Guide:\"\n        echo \"  MC 1.7.10 - 1.16.5 : Java 8\"\n        echo \"  MC 1.17.x          : Java 16\"\n        echo \"  MC 1.18 - 1.20.4   : Java 17\"\n        echo \"  MC 1.20.5+         : Java 21\"\n        echo \"\"\n    else\n        echo \"ERROR: Downloaded file is too small (${SIZE} bytes)\"\n        echo \"Download may have failed.\"\n        \n        # Restore backup\n        if [ -f \"${SERVER_JARFILE}.backup\" ]; then\n            mv \"${SERVER_JARFILE}.backup\" \"${SERVER_JARFILE}\"\n        fi\n        exit 1\n    fi\nelse\n    echo \"ERROR: Download failed - file not found\"\n    exit 1\nfi",
+            "container": "ghcr.io/parkervcp/installers:alpine",
+            "entrypoint": "ash"
+        }
+    },
+    "variables": [
+        {
+            "name": "Server Jar File",
+            "description": "Nom du fichier JAR du serveur.",
+            "env_variable": "SERVER_JARFILE",
+            "default_value": "server.jar",
+            "user_viewable": true,
+            "user_editable": false,
+            "rules": "required|string|max:50",
+            "field_type": "text"
+        },
+        {
+            "name": "Minecraft Version",
+            "description": "Version de Minecraft. Versions disponibles: 1.7.10, 1.12.2, 1.16.5, 1.18.2, 1.19.2, 1.19.4, 1.20.1, 1.20.2, 1.20.6, 1.21.4",
+            "env_variable": "MC_VERSION",
+            "default_value": "1.20.1",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:20",
+            "field_type": "text"
+        },
+        {
+            "name": "Build Number",
+            "description": "Numéro de build spécifique (optionnel). Laissez vide pour la dernière version stable.",
+            "env_variable": "BUILD_NUMBER",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:20",
+            "field_type": "text"
+        },
+        {
+            "name": "Custom Download URL",
+            "description": "URL personnalisée pour télécharger le JAR (optionnel, pour usage avancé).",
+            "env_variable": "DL_PATH",
+            "default_value": "",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "nullable|string",
+            "field_type": "text"
+        }
+    ]
+}

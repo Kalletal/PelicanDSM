@@ -82,12 +82,16 @@ services:
       - ${DATA_ROOT}/wings:/etc/pelican
       # Docker socket for container management
       - /var/run/docker.sock:/var/run/docker.sock
-      # Server data
-      - ${DATA_ROOT}/servers:/var/lib/pelican/volumes
+      # Server data - IMPORTANT: same path inside and outside for Docker-in-Docker
+      - ${DATA_ROOT}/servers:${DATA_ROOT}/servers
       # Server backups
-      - ${DATA_ROOT}/backups:/var/lib/pelican/backups
+      - ${DATA_ROOT}/backups:${DATA_ROOT}/backups
+      # Server archives
+      - ${DATA_ROOT}/archives:${DATA_ROOT}/archives
+      # Temporary files for installation scripts - must be accessible from host
+      - ${DATA_ROOT}/tmp:${DATA_ROOT}/tmp
       # Logs
-      - ${DATA_ROOT}/wings-logs:/var/log/pelican
+      - ${DATA_ROOT}/wings-logs:${DATA_ROOT}/wings-logs
 
     environment:
       TZ: "${APP_TIMEZONE:-Europe/Paris}"

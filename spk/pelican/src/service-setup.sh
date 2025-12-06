@@ -43,7 +43,11 @@ create_data_dirs()
     mkdir -p "${DATA_DIR}/wings" 2>/dev/null || true
     mkdir -p "${DATA_DIR}/servers" 2>/dev/null || true
     mkdir -p "${DATA_DIR}/backups" 2>/dev/null || true
+    mkdir -p "${DATA_DIR}/archives" 2>/dev/null || true
     mkdir -p "${DATA_DIR}/wings-logs" 2>/dev/null || true
+    # Temp directory for installation scripts (must be accessible by Docker)
+    mkdir -p "${DATA_DIR}/tmp" 2>/dev/null || true
+    chmod 777 "${DATA_DIR}/tmp" 2>/dev/null || true
     # Package logs
     install -d -m 0750 "${LOG_DIR}" 2>/dev/null || mkdir -p "${LOG_DIR}"
 }

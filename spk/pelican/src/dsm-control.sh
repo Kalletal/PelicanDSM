@@ -163,12 +163,28 @@ fix_permissions()
 {
     log "Fixing permissions for container volumes..."
 
+    # Panel directories
     mkdir -p "${DATA_DIR}/pelican-data"
     mkdir -p "${DATA_DIR}/pelican-logs"
     mkdir -p "${DATA_DIR}/pelican-logs/supervisord"
 
+    # Wings directories (must exist for Docker-in-Docker)
+    mkdir -p "${DATA_DIR}/servers"
+    mkdir -p "${DATA_DIR}/backups"
+    mkdir -p "${DATA_DIR}/archives"
+    mkdir -p "${DATA_DIR}/wings-logs"
+    mkdir -p "${DATA_DIR}/tmp"
+
     chmod -R 777 "${DATA_DIR}/pelican-data" 2>/dev/null || true
     chmod -R 777 "${DATA_DIR}/pelican-logs" 2>/dev/null || true
+    chmod 777 "${DATA_DIR}/tmp" 2>/dev/null || true
+
+    # Fix SQLite database permissions specifically
+    if [ -d "${DATA_DIR}/pelican-data/database" ]; then
+        chmod 775 "${DATA_DIR}/pelican-data/database" 2>/dev/null || true
+        chmod 664 "${DATA_DIR}/pelican-data/database/"*.sqlite 2>/dev/null || true
+        log "SQLite database permissions fixed"
+    fi
 
     log "Permissions fixed"
 }
