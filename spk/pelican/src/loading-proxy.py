@@ -23,10 +23,13 @@ LISTEN_PORT = 8080
 PANEL_INTERNAL_PORT = 8090
 PANEL_CHECK_INTERVAL = 2  # Check every 2 seconds for faster updates
 LOADING_HTML_PATH = "/var/packages/pelican_panel/target/share/loading.html"
+INSTRUCTIONS_HTML_PATH = "/var/packages/pelican_panel/target/share/app/instructions.html"
 CONTAINER_NAME = "pelican_panel-panel-1"
 VAR_DIR = "/var/packages/pelican_panel/var"
 WINGS_CONFIG_PATH = f"{VAR_DIR}/data/wings/config.yml"
 WINGS_PID_FILE = f"{VAR_DIR}/wings.pid"
+INSTALL_COMPLETE_FLAG = f"{VAR_DIR}/install_complete"
+DATA_ROOT = f"{VAR_DIR}/data"  # Host path for Docker bind mounts
 
 # Total migrations in Pelican Panel (222 tables based on actual install)
 # This is updated dynamically if we discover more migrations
@@ -412,15 +415,28 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
                 self._serve_loading_page()
 
     def _redirect_to_panel(self):
-        """Redirect to the Panel on internal port."""
+        """Redirect to the Panel on internal port or show instructions."""
         try:
             # Get the host from the request
             host = self.headers.get('Host', '').split(':')[0]
             if not host:
                 host = '127.0.0.1'
 
+            path = self.path
+
+            # Check if this is first-time setup (install not complete)
+            # and user is accessing root
+            if (path == '/' or path == '') and not os.path.exists(INSTALL_COMPLETE_FLAG):
+                # Show instructions page before redirecting to installer
+                self._serve_instructions_page()
+                return
+
+            # For subsequent accesses or other paths, redirect to panel
+            if path == '/' or path == '':
+                path = '/'  # Let Pelican handle routing
+
             # Redirect to the internal port
-            redirect_url = f"http://{host}:{PANEL_INTERNAL_PORT}{self.path}"
+            redirect_url = f"http://{host}:{PANEL_INTERNAL_PORT}{path}"
 
             self.send_response(302)
             self.send_header('Location', redirect_url)
@@ -428,6 +444,45 @@ class ProxyHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
         except Exception as e:
             print(f"[proxy] Redirect error: {e}")
+            self._serve_loading_page()
+
+    def _serve_instructions_page(self):
+        """Serve the installation instructions page."""
+        try:
+            with open(INSTRUCTIONS_HTML_PATH, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Replace placeholder with actual internal port
+            content = content.replace('{{INTERNAL_PORT}}', str(PANEL_INTERNAL_PORT))
+
+            content_bytes = content.encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', len(content_bytes))
+            self.send_header('Cache-Control', 'no-cache')
+            self.end_headers()
+            self.wfile.write(content_bytes)
+
+            # Mark that instructions were shown - create flag file
+            # This ensures instructions are shown only once
+            try:
+                with open(INSTALL_COMPLETE_FLAG, 'w') as f:
+                    f.write(str(int(time.time())))
+                print(f"[proxy] Instructions shown, created flag: {INSTALL_COMPLETE_FLAG}")
+            except Exception as e:
+                print(f"[proxy] Could not create install flag: {e}")
+
+        except FileNotFoundError:
+            print(f"[proxy] Instructions file not found: {INSTRUCTIONS_HTML_PATH}")
+            # Fallback: redirect directly to installer
+            host = self.headers.get('Host', '').split(':')[0] or '127.0.0.1'
+            redirect_url = f"http://{host}:{PANEL_INTERNAL_PORT}/installer"
+            self.send_response(302)
+            self.send_header('Location', redirect_url)
+            self.send_header('Cache-Control', 'no-cache')
+            self.end_headers()
+        except Exception as e:
+            print(f"[proxy] Error serving instructions: {e}")
             self._serve_loading_page()
 
     def _serve_status_api(self):
@@ -680,10 +735,94 @@ def get_wings_config():
 
 
 def save_wings_config(config_content):
-    """Save Wings configuration and restart the package."""
+    """Save Wings configuration and restart the package.
+
+    Applies automatic fixes for Docker-in-Docker setup on Synology:
+    1. Fixes API port: Panel generates 8445 (external), but container needs 8080 (internal)
+    2. Fixes system paths: Uses host paths instead of container paths for bind mounts
+    3. Disables mount_passwd: The passwd_file path doesn't exist on host
+    4. Fixes tmp_directory: Must be host path for install scripts
+    """
     try:
         # Create directory if needed
         os.makedirs(os.path.dirname(WINGS_CONFIG_PATH), exist_ok=True)
+
+        # === FIX 1: API Port ===
+        # The Panel generates config with external port (8445), but Wings inside
+        # the container must listen on internal port (8080) because Docker maps 8445:8080
+        config_content = re.sub(
+            r'(\n\s*port:\s*)8445(\s*\n)',
+            r'\g<1>8080\2',
+            config_content
+        )
+
+        # === FIX 2: System Paths for Docker-in-Docker ===
+        # Wings runs in a container but creates game server containers via mounted Docker socket.
+        # Those containers need HOST paths, not container paths.
+        # Replace /var/lib/pelican/* with actual Synology host paths.
+        path_mappings = [
+            (r'/var/lib/pelican/volumes', f'{DATA_ROOT}/servers'),
+            (r'/var/lib/pelican/backups', f'{DATA_ROOT}/backups'),
+            (r'/var/lib/pelican/archives', f'{DATA_ROOT}/archives'),
+            (r'/var/log/pelican', f'{DATA_ROOT}/wings-logs'),
+        ]
+        for old_path, new_path in path_mappings:
+            config_content = config_content.replace(old_path, new_path)
+
+        # Also fix root_directory if present
+        config_content = re.sub(
+            r'(\s*root_directory:\s*)/var/lib/pelican\s*\n',
+            f'\\g<1>{DATA_ROOT}\n',
+            config_content
+        )
+
+        # === FIX 3: Disable mount_passwd ===
+        # The passwd_file path /etc/pelican/passwd is inside the Wings container,
+        # but Docker tries to mount it from the HOST where it doesn't exist.
+        # Disabling mount_passwd avoids this issue.
+        config_content = re.sub(
+            r'(\s*mount_passwd:\s*)true',
+            r'\g<1>false',
+            config_content
+        )
+
+        # === FIX 4: tmp_directory ===
+        # The tmp_directory is used for install scripts. It must be a host path
+        # so Docker can mount it when creating install containers.
+        config_content = re.sub(
+            r'(\s*tmp_directory:\s*)/tmp/pelican\s*\n',
+            f'\\g<1>{DATA_ROOT}/tmp\n',
+            config_content
+        )
+
+        # Create tmp directory
+        os.makedirs(f'{DATA_ROOT}/tmp', exist_ok=True)
+        os.chmod(f'{DATA_ROOT}/tmp', 0o777)
+
+        # Auto-append Docker network config if not present
+        # This prevents "Pool overlaps" errors with default Docker network settings
+        # Uses 172.31.x.x to avoid conflict with pelican_network (172.30.x.x)
+        if 'docker:' not in config_content:
+            docker_config = """
+docker:
+  network:
+    interface: 172.31.0.1
+    dns:
+      - 1.1.1.1
+      - 1.0.0.1
+    name: pelican0
+    ispn: false
+    driver: bridge
+    network_mode: pelican0
+    is_internal: false
+    enable_icc: true
+    network_mtu: 1500
+    interfaces:
+      v4:
+        subnet: 172.31.0.0/16
+        gateway: 172.31.0.1
+"""
+            config_content = config_content.rstrip() + "\n" + docker_config
 
         # Save config
         with open(WINGS_CONFIG_PATH, 'w') as f:
@@ -821,6 +960,44 @@ def get_wings_config_html():
             text-decoration: none;
         }
         .back-link:hover { text-decoration: underline; }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+        .info-item {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 12px;
+            border-radius: 8px;
+        }
+        .info-label {
+            display: block;
+            font-size: 0.8rem;
+            color: #a0a0a0;
+            margin-bottom: 4px;
+        }
+        .info-value {
+            display: block;
+            font-size: 1.1rem;
+            color: #4fc3f7;
+            font-family: monospace;
+            font-weight: 600;
+        }
+        .warning-note {
+            background: rgba(251, 191, 36, 0.1);
+            border: 1px solid rgba(251, 191, 36, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: #fbbf24;
+        }
+        .warning-note code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #fff;
+        }
     </style>
 </head>
 <body>
@@ -837,10 +1014,38 @@ def get_wings_config_html():
             <div class="instructions">
                 <ol>
                     <li>Dans le <strong>Panel Pelican</strong>, allez dans <code>Admin</code> &rarr; <code>Nodes</code> &rarr; <code>Create New</code></li>
-                    <li>Configurez le Node avec le FQDN de votre NAS</li>
+                    <li>Configurez le Node avec les informations ci-dessous</li>
                     <li>Cliquez sur l'onglet <code>Configuration</code> puis <code>Generate Token</code></li>
                     <li><strong>Copiez tout le YAML</strong> et collez-le ci-dessous</li>
                 </ol>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Informations pour la creation du Node</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">FQDN / IP du NAS</span>
+                    <span class="info-value" id="nasHost">-</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Port Daemon (Wings API)</span>
+                    <span class="info-value">8445</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Port SFTP</span>
+                    <span class="info-value">2022</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">URL du Panel (pour config Node)</span>
+                    <span class="info-value" id="panelUrl">-</span>
+                </div>
+            </div>
+            <div class="warning-note">
+                <strong>Important :</strong> Dans la configuration du Node, utilisez le port <code>8090</code> pour l'URL du Panel (pas 8080).
+            </div>
+            <div class="success-note" style="background: rgba(76, 175, 80, 0.1); border: 1px solid rgba(76, 175, 80, 0.3); border-radius: 8px; padding: 12px; margin-top: 15px; font-size: 0.9rem; color: #81c784;">
+                <strong>Corrections automatiques :</strong> Lors de l'enregistrement, le port API et les chemins systeme sont automatiquement corriges pour fonctionner avec Docker sur Synology.
             </div>
         </div>
 
@@ -858,10 +1063,39 @@ def get_wings_config_html():
     </div>
 
     <script>
+        // Detect if running in HTTPS context (DSM built-in mode)
+        // If HTTPS, use CGI proxy served by DSM. If HTTP, call loading proxy directly.
+        const isHttps = window.location.protocol === 'https:';
+        const CGI_BASE = '/webman/3rdparty/pelican_panel/api.cgi';
+        const API_BASE = 'http://' + window.location.hostname + ':8080/api/wings';
+
+        async function apiCall(action, method, body) {
+            if (isHttps) {
+                // Use CGI proxy for HTTPS (DSM built-in mode)
+                const url = CGI_BASE + '?action=' + action;
+                const options = { method: method || 'GET' };
+                if (body) {
+                    options.headers = { 'Content-Type': 'application/json' };
+                    options.body = JSON.stringify(body);
+                }
+                return fetch(url, options);
+            } else {
+                // Direct call for HTTP
+                const endpoint = action === 'status' ? '/status' : '/config';
+                const url = API_BASE + endpoint;
+                const options = { method: method || 'GET' };
+                if (body) {
+                    options.headers = { 'Content-Type': 'application/json' };
+                    options.body = JSON.stringify(body);
+                }
+                return fetch(url, options);
+            }
+        }
+
         async function loadConfig() {
             hideAlerts();
             try {
-                const response = await fetch('/api/wings/config');
+                const response = await apiCall('get-config', 'GET');
                 const data = await response.json();
                 if (data.success) {
                     document.getElementById('configEditor').value = data.config || '';
@@ -882,11 +1116,7 @@ def get_wings_config_html():
             }
             hideAlerts();
             try {
-                const response = await fetch('/api/wings/config', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ config: config })
-                });
+                const response = await apiCall('save-config', 'POST', { config: config });
                 const data = await response.json();
                 if (data.success) {
                     showSuccess('Configuration enregistree ! Wings redemarre...');
@@ -901,7 +1131,7 @@ def get_wings_config_html():
 
         async function checkStatus() {
             try {
-                const response = await fetch('/api/wings/status');
+                const response = await apiCall('status', 'GET');
                 const data = await response.json();
                 const badge = document.getElementById('wingsStatus');
                 if (data.running) {
@@ -933,7 +1163,16 @@ def get_wings_config_html():
             document.getElementById('alertError').style.display = 'none';
         }
 
-        document.addEventListener('DOMContentLoaded', loadConfig);
+        // Populate dynamic info on page load
+        function populateInfo() {
+            document.getElementById('nasHost').textContent = window.location.hostname;
+            document.getElementById('panelUrl').textContent = 'http://' + window.location.hostname + ':8090';
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            populateInfo();
+            loadConfig();
+        });
         setInterval(checkStatus, 15000);
     </script>
 </body>

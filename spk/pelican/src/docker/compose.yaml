@@ -31,11 +31,10 @@ services:
       APP_ENV: production
       APP_DEBUG: "false"
       APP_URL: "${APP_URL}"
-      APP_LOCALE: "${APP_LOCALE:-fr}"
       APP_TIMEZONE: "${APP_TIMEZONE:-Europe/Paris}"
 
-      # Admin setup (used by installer)
-      ADMIN_EMAIL: "${ADMIN_EMAIL}"
+      # Email for Caddy SSL (Let's Encrypt) - required even if not using HTTPS
+      ADMIN_EMAIL: "${ADMIN_EMAIL:-admin@localhost}"
 
       # Session/Cookie (false for HTTP, true with reverse proxy HTTPS)
       SESSION_SECURE_COOKIE: "false"

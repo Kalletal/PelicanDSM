@@ -1,6 +1,6 @@
 SPK_NAME = pelican_panel
 SPK_VERS = 1.0.0
-SPK_REV = 70
+SPK_REV = 94
 SPK_ICON = src/pelican.png
 DSM_UI_DIR = app
 

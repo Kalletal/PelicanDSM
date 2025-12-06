@@ -14,6 +14,7 @@ ENV_FILE="${VAR_DIR}/panel.env"
 
 # Wings config path (container managed via Docker Compose)
 WINGS_CONFIG="${VAR_DIR}/data/wings/config.yml"
+DATA_DIR="${VAR_DIR}/data"
 
 # Loading proxy
 LOADING_PROXY="${INSTALL_DIR}/bin/loading-proxy.py"
@@ -125,10 +126,42 @@ ensure_port_free()
     return 0
 }
 
+# Fix Wings config for Docker-in-Docker on Synology
+# Applied at every start to ensure config is always correct
+fix_wings_config()
+{
+    if [ -f "${WINGS_CONFIG}" ]; then
+        log "Applying Docker-in-Docker fixes to Wings config..."
+
+        # FIX 1: API Port - Panel generates 8445 (external) but container needs 8080 (internal)
+        sed -i 's/^\(\s*port:\s*\)8445\s*$/\18080/' "${WINGS_CONFIG}"
+
+        # FIX 2: System paths - Use host paths instead of container paths
+        sed -i "s|/var/lib/pelican/volumes|${DATA_DIR}/servers|g" "${WINGS_CONFIG}"
+        sed -i "s|/var/lib/pelican/backups|${DATA_DIR}/backups|g" "${WINGS_CONFIG}"
+        sed -i "s|/var/lib/pelican/archives|${DATA_DIR}/archives|g" "${WINGS_CONFIG}"
+        sed -i "s|/var/log/pelican|${DATA_DIR}/wings-logs|g" "${WINGS_CONFIG}"
+
+        # Fix root_directory if it points to container path
+        sed -i "s|^\(\s*root_directory:\s*\)/var/lib/pelican\s*$|\1${DATA_DIR}|" "${WINGS_CONFIG}"
+
+        # FIX 3: Disable mount_passwd - the passwd_file path doesn't exist on host
+        sed -i 's/^\(\s*mount_passwd:\s*\)true\s*$/\1false/' "${WINGS_CONFIG}"
+
+        # FIX 4: tmp_directory - Must be a host path for install scripts
+        sed -i "s|^\(\s*tmp_directory:\s*\)/tmp/pelican\s*$|\1${DATA_DIR}/tmp|" "${WINGS_CONFIG}"
+
+        # Create required directories
+        mkdir -p "${DATA_DIR}/servers" "${DATA_DIR}/backups" "${DATA_DIR}/archives" "${DATA_DIR}/wings-logs" "${DATA_DIR}/tmp" 2>/dev/null || true
+        chmod 777 "${DATA_DIR}/tmp" 2>/dev/null || true
+
+        log "Wings config fixes applied"
+    fi
+}
+
 fix_permissions()
 {
     log "Fixing permissions for container volumes..."
-    DATA_DIR="${VAR_DIR}/data"
 
     mkdir -p "${DATA_DIR}/pelican-data"
     mkdir -p "${DATA_DIR}/pelican-logs"
@@ -177,72 +210,6 @@ wait_for_migrations()
     return 1
 }
 
-create_admin_user()
-{
-    if [ -f "${ENV_FILE}" ]; then
-        ADMIN_CREATED=$(grep -E "^ADMIN_CREATED=" "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"' || echo "false")
-        if [ "${ADMIN_CREATED}" = "true" ]; then
-            log "Admin user already created, skipping"
-            return 0
-        fi
-    fi
-
-    ADMIN_EMAIL=$(grep -E "^ADMIN_EMAIL=" "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"' || echo "admin@example.com")
-    ADMIN_USERNAME=$(grep -E "^ADMIN_USERNAME=" "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"' || echo "admin")
-    ADMIN_PASSWORD=$(grep -E "^ADMIN_PASSWORD=" "${ENV_FILE}" | cut -d'=' -f2 | tr -d '"' || echo "")
-
-    if [ -z "${ADMIN_PASSWORD}" ]; then
-        log "No admin password configured, skipping admin creation"
-        return 1
-    fi
-
-    log "Creating admin user: ${ADMIN_USERNAME} (${ADMIN_EMAIL})..."
-    log "Password length: ${#ADMIN_PASSWORD} characters"
-
-    CONTAINER_NAME="${PACKAGE}-panel-1"
-
-    if ! docker ps --filter "name=${CONTAINER_NAME}" --format '{{.Names}}' | grep -q "${CONTAINER_NAME}"; then
-        log "Panel container not found, cannot create admin"
-        return 1
-    fi
-
-    # Wait longer for migrations to fully complete
-    sleep 10
-
-    # Try to create user with retries
-    for attempt in 1 2 3; do
-        log "Admin creation attempt ${attempt}/3..."
-
-        RESULT=$(docker exec "${CONTAINER_NAME}" php artisan p:user:make \
-            --email="${ADMIN_EMAIL}" \
-            --username="${ADMIN_USERNAME}" \
-            --password="${ADMIN_PASSWORD}" \
-            --admin=1 \
-            --no-interaction 2>&1)
-
-        log "Artisan output: ${RESULT}"
-
-        # Check for success - artisan outputs a table with UUID when successful
-        if echo "${RESULT}" | grep -qiE "(created|success|already exists|user.* created|UUID)"; then
-            log "Admin user created successfully"
-            sed -i "s#ADMIN_CREATED=.*#ADMIN_CREATED=true#" "${ENV_FILE}"
-            return 0
-        fi
-
-        if echo "${RESULT}" | grep -qiE "(already|duplicate|exists|unique constraint)"; then
-            log "Admin user already exists"
-            sed -i "s#ADMIN_CREATED=.*#ADMIN_CREATED=true#" "${ENV_FILE}"
-            return 0
-        fi
-
-        # Wait before retry
-        sleep 10
-    done
-
-    log "Failed to create admin after 3 attempts. Last result: ${RESULT}"
-    return 1
-}
-
 start_containers()
 {
     if [ ! -f "${COMPOSE_FILE}" ]; then
@@ -286,7 +253,8 @@ start_containers()
     log "Docker containers started. Panel initializing..."
     log "Users can access http://<IP>:${PANEL_PORT} - loading page shown until Panel is ready"
 
-    # STEP 5: Wait for panel and create admin in background
+    # STEP 5: Wait for panel to be ready in background
+    # Note: Admin user is created via Pelican web installer at /installer
     (
         log "Waiting for Panel to be ready..."
 
@@ -308,11 +276,7 @@ start_containers()
         log "Waiting for migrations to finish..."
         wait_for_migrations
 
-        # Create admin user
-        log "Creating admin user..."
-        create_admin_user
-
-        log "Panel fully initialized"
+        log "Panel fully initialized - user should complete setup at /installer"
     ) >> "${LOG_FILE}" 2>&1 &
 
     return 0
@@ -358,6 +322,7 @@ case "$1" in
     start)
         echo "Démarrage de ${DNAME}"
         log "Starting ${DNAME}"
+        fix_wings_config  # Apply Docker-in-Docker fixes before starting
         start_containers
         start_wings
         exit 0

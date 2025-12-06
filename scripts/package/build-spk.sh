@@ -72,6 +72,11 @@ create_package_content() {
 
     # Loading page and proxy
     cp "${SPK_SRC}/loading.html" "${PKG_DIR}/share/"
+
+    # Instructions page (shown after loading, before Pelican installer)
+    mkdir -p "${PKG_DIR}/share/app"
+    cp "${SPK_SRC}/app/instructions.html" "${PKG_DIR}/share/app/"
+    chmod 644 "${PKG_DIR}/share/app/instructions.html"
     cp "${SPK_SRC}/loading-server.sh" "${PKG_DIR}/bin/"
     cp "${SPK_SRC}/loading-proxy.py" "${PKG_DIR}/bin/"
     chmod +x "${PKG_DIR}/bin/loading-server.sh"

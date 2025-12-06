@@ -20,116 +20,7 @@
         ]
       },
       {
-        "type": "textfield",
-        "desc": "Port HTTP pour accéder au Panel (défaut: 8080)",
-        "subitems": [
-          {
-            "key": "wizard_port",
-            "desc": "Port HTTP",
-            "defaultValue": "8080",
-            "validator": {
-              "allowBlank": false,
-              "regex": {
-                "expr": "/^[0-9]+$/",
-                "errorText": "Le port doit être un nombre"
-              }
-            }
-          }
-        ]
-      },
-      {
-        "desc": "<br><b>URL finale:</b> <code>http://&lt;hôte&gt;:&lt;port&gt;</code>"
-      }
-    ]
-  },
-  {
-    "step_title": "Compte Administrateur",
-    "invalid_next_disabled": true,
-    "items": [
-      {
-        "desc": "<b>Créez le compte administrateur initial.</b><br>Ces identifiants vous permettront de vous connecter au Panel."
-      },
-      {
-        "type": "textfield",
-        "desc": "Adresse email de l'administrateur",
-        "subitems": [
-          {
-            "key": "wizard_admin_email",
-            "desc": "Email admin",
-            "defaultValue": "admin@example.com",
-            "validator": {
-              "allowBlank": false,
-              "regex": {
-                "expr": "/^[^@]+@[^@]+\\.[^@]+$/",
-                "errorText": "Entrez une adresse email valide"
-              }
-            }
-          }
-        ]
-      },
-      {
-        "type": "textfield",
-        "desc": "Nom d'utilisateur pour la connexion",
-        "subitems": [
-          {
-            "key": "wizard_admin_username",
-            "desc": "Nom d'utilisateur",
-            "defaultValue": "admin",
-            "validator": {
-              "allowBlank": false,
-              "minLength": 3
-            }
-          }
-        ]
-      },
-      {
-        "type": "password",
-        "desc": "Mot de passe administrateur (min. 8 caractères)",
-        "subitems": [
-          {
-            "key": "wizard_admin_password",
-            "desc": "Mot de passe admin",
-            "defaultValue": "",
-            "validator": {
-              "allowBlank": false,
-              "minLength": 8
-            }
-          }
-        ]
-      },
-      {
-        "type": "password",
-        "desc": "Confirmez le mot de passe",
-        "subitems": [
-          {
-            "key": "wizard_admin_password_confirm",
-            "desc": "Confirmation",
-            "defaultValue": "",
-            "validator": {
-              "allowBlank": false,
-              "fn": "{var v=arguments[0];var form=arguments[2];if(!form)return true;var pwField=form.findField('wizard_admin_password');if(!pwField)return true;var pw=pwField.getValue();if(v!==pw)return 'Les mots de passe ne correspondent pas';return true;}"
-            }
-          }
-        ]
-      },
-      {
-        "type": "combobox",
-        "desc": "Langue de l'interface du Panel",
-        "subitems": [
-          {
-            "key": "wizard_locale",
-            "desc": "Langue",
-            "defaultValue": "fr",
-            "editable": false,
-            "items": [
-              { "value": "fr", "displayValue": "Français" },
-              { "value": "en", "displayValue": "English" }
-            ]
-          }
-        ]
-      },
-      {
-        "desc": "<br><i>Notez ces identifiants ! Vous pourrez modifier le mot de passe depuis le Panel après connexion.</i>"
+        "desc": "<br><b>Port fixe:</b> <code>8080</code> (HTTP) / <code>8444</code> (HTTPS)<br><i>Pour un autre port, utilisez le reverse proxy DSM après installation.</i>"
       }
     ]
   },
@@ -140,10 +31,13 @@
         "desc": "<b>Prérequis:</b><ul><li><b>Container Manager</b> (Docker) doit être installé</li><li>Connexion Internet pour télécharger l'image Docker (~500 MB)</li></ul>"
       },
       {
-        "desc": "<br><b style='color:#e74c3c;'>IMPORTANT - Premier démarrage :</b><br><br>Le premier démarrage prend <b>5 à 10 minutes</b> pour :<ul><li>Télécharger l'image Docker (~500 MB)</li><li>Exécuter les migrations de base de données</li><li>Configurer l'application</li></ul><br>Une <b>page de chargement</b> s'affichera automatiquement pendant l'initialisation. Vous serez redirigé vers le Panel une fois prêt."
+        "desc": "<br><b style='color:#e74c3c;'>IMPORTANT - Premier démarrage :</b><br><br>Le premier démarrage prend <b>5 à 10 minutes</b> pour :<ul><li>Télécharger l'image Docker (~500 MB)</li><li>Exécuter les migrations de base de données</li><li>Configurer l'application</li></ul><br>Une <b>page de chargement</b> s'affichera automatiquement pendant l'initialisation."
       },
       {
-        "desc": "<br><hr><br><b>Configuration de Wings :</b><br>Consultez la <b>description du paquet</b> dans le Centre de paquets après l'installation."
+        "desc": "<br><hr><br><b style='color:#4fc3f7;'>Création du compte administrateur :</b><br><br>Une fois les migrations terminées, vous serez redirigé vers le <b>wizard d'installation Pelican</b> pour créer votre compte administrateur.<br><br><i>Conservez précieusement vos identifiants !</i>"
+      },
+      {
+        "desc": "<br><hr><br><b>Configuration de Wings :</b><br>Après avoir créé votre compte admin, consultez la <b>description du paquet</b> dans le Centre de paquets pour configurer Wings."
       }
     ]
   }
