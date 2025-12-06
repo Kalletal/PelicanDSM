@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Wizard Locale Field - French Default",
+  "description": "Configuration du champ de sélection de langue avec Français par défaut et choix limité à Français/Anglais",
+  "version": "1.0",
+  "feature": "002-french-default",
+  "parent_feature": "001-pelican-synology",
+
+  "field_definition": {
+    "id": "wizard_locale",
+    "type": "select",
+    "label": "Langue de l'interface",
+    "description": "Langue par défaut du Panel (modifiable ensuite dans les paramètres)",
+    "default": "fr",
+    "required": true,
+    "options": [
+      {
+        "value": "fr",
+        "label": "Français"
+      },
+      {
+        "value": "en",
+        "label": "English"
+      }
+    ]
+  },
+
+  "dsm_native_format": {
+    "_comment": "Format pour spk/pelican/src/wizard/install_uifile",
+    "type": "combobox",
+    "subitems": [
+      {
+        "key": "wizard_locale",
+        "desc": "Langue de l'interface",
+        "defaultValue": "fr",
+        "editable": false,
+        "items": [
+          { "value": "fr", "displayValue": "Français" },
+          { "value": "en", "displayValue": "English" }
+        ]
+      }
+    ]
+  },
+
+  "environment_mapping": {
+    "APP_LOCALE": "${wizard_locale}"
+  },
+
+  "validation": {
+    "allowed_values": ["fr", "en"],
+    "default_value": "fr"
+  },
+
+  "changes_from_parent": {
+    "removed_options": [
+      {"value": "de", "label": "Deutsch"},
+      {"value": "es", "label": "Español"},
+      {"value": "it", "label": "Italiano"},
+      {"value": "pt", "label": "Português"},
+      {"value": "ru", "label": "Русский"},
+      {"value": "zh", "label": "中文"},
+      {"value": "ja", "label": "日本語"},
+      {"value": "ko", "label": "한국어"}
+    ],
+    "rationale": "Simplification pour le public cible francophone. Français par défaut, Anglais comme alternative."
+  }
+}
