@@ -22,6 +22,10 @@ services:
       - ${DATA_ROOT}/pelican-data:/pelican-data
       # Application logs
       - ${DATA_ROOT}/pelican-logs:/var/www/html/storage/logs
+      # Patched PHP files for Synology (default Wings port 8445)
+      - /var/packages/pelican_panel/target/share/patches/Node.php:/var/www/html/app/Models/Node.php:ro
+      - /var/packages/pelican_panel/target/share/patches/CreateNode.php:/var/www/html/app/Filament/Admin/Resources/Nodes/Pages/CreateNode.php:ro
+      - /var/packages/pelican_panel/target/share/patches/EditNode.php:/var/www/html/app/Filament/Admin/Resources/Nodes/Pages/EditNode.php:ro
 
     environment:
       # Data location (required for Pelican)
@@ -70,7 +74,8 @@ services:
     restart: unless-stopped
 
     ports:
-      # Wings API port (différent du Panel HTTPS 8443)
+      # Wings API port
+      # IMPORTANT: Lors de la création du Node dans le Panel, utilisez le port 8445
       - "${WINGS_PORT:-8445}:8080"
       - "${WINGS_SFTP_PORT:-2022}:2022"
 

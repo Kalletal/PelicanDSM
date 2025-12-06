@@ -7,8 +7,8 @@
 # Wings tourne dans un conteneur mais crée des conteneurs de jeux via le socket Docker.
 # Les chemins doivent être des chemins HÔTE (Synology) car Docker les monte depuis l'hôte.
 #
-# Les corrections suivantes sont appliquées AUTOMATIQUEMENT lors de la sauvegarde:
-# - Port API: 8445 → 8080 (port interne du conteneur)
+# Les corrections suivantes sont appliquées AUTOMATIQUEMENT au démarrage:
+# - Port API: 8445 → 8080 (le Panel génère 8445, mais le conteneur écoute sur 8080)
 # - Chemins: /var/lib/pelican/* → /var/packages/pelican_panel/var/data/*
 # - mount_passwd: true → false
 # - tmp_directory: /tmp/pelican → chemin hôte
@@ -64,9 +64,9 @@ system:
 # --- API Settings ---
 api:
   host: 0.0.0.0
-  # Port INTERNE du conteneur
-  # IMPORTANT: Docker mappe 8445 (externe) -> 8080 (interne)
-  # Le Panel génère la config avec 8445, mais elle est automatiquement corrigée en 8080
+  # Port INTERNE du conteneur Wings
+  # IMPORTANT: Dans le Panel, créez le Node avec le port 8445 (externe)
+  # La correction automatique changera 8445 → 8080 dans ce fichier
   port: 8080
 
   # SSL/TLS - Désactivé car géré par reverse proxy DSM
@@ -78,6 +78,12 @@ api:
 
   # Timeouts
   upload_limit: 100
+
+# --- Allowed Origins ---
+# Origines autorisées pour les WebSockets (console serveur)
+# '*' autorise toutes les origines - nécessaire sur Synology car l'IP peut varier
+allowed_origins:
+  - "*"
 
 # --- Panel Connection ---
 # IMPORTANT: Ces valeurs seront remplacées par celles du Panel

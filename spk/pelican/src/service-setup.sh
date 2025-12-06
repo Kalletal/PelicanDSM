@@ -120,7 +120,7 @@ fix_wings_config()
 {
     if [ -f "${WINGS_CONFIG}" ]; then
         # FIX 1: API Port - Panel generates 8445 (external) but container needs 8080 (internal)
-        sed -i 's/^\(\s*port:\s*\)8445\s*$/\18080/' "${WINGS_CONFIG}"
+        sed -i 's/port: 8445$/port: 8080/' "${WINGS_CONFIG}"
 
         # FIX 2: System paths - Use host paths instead of container paths
         sed -i "s|/var/lib/pelican/volumes|${DATA_DIR}/servers|g" "${WINGS_CONFIG}"
@@ -128,14 +128,20 @@ fix_wings_config()
         sed -i "s|/var/lib/pelican/archives|${DATA_DIR}/archives|g" "${WINGS_CONFIG}"
         sed -i "s|/var/log/pelican|${DATA_DIR}/wings-logs|g" "${WINGS_CONFIG}"
 
-        # Fix root_directory if it points to container path
-        sed -i "s|^\(\s*root_directory:\s*\)/var/lib/pelican\s*$|\1${DATA_DIR}|" "${WINGS_CONFIG}"
+        # Fix root_directory - match with or without trailing content
+        sed -i "s|root_directory: /var/lib/pelican$|root_directory: ${DATA_DIR}|" "${WINGS_CONFIG}"
 
         # FIX 3: Disable mount_passwd - the passwd_file path doesn't exist on host
-        sed -i 's/^\(\s*mount_passwd:\s*\)true\s*$/\1false/' "${WINGS_CONFIG}"
+        sed -i 's/mount_passwd: true/mount_passwd: false/g' "${WINGS_CONFIG}"
 
         # FIX 4: tmp_directory - Must be a host path for install scripts
-        sed -i "s|^\(\s*tmp_directory:\s*\)/tmp/pelican\s*$|\1${DATA_DIR}/tmp|" "${WINGS_CONFIG}"
+        sed -i "s|tmp_directory: /tmp/pelican$|tmp_directory: ${DATA_DIR}/tmp|" "${WINGS_CONFIG}"
+
+        # FIX 5: Fix allowed_origins for WebSocket
+        sed -i 's/allowed_origins: \[\]/allowed_origins:\n  - "*"/' "${WINGS_CONFIG}"
+
+        # FIX 6: Prevent Panel from overwriting our config fixes
+        sed -i 's/ignore_panel_config_updates: false/ignore_panel_config_updates: true/' "${WINGS_CONFIG}"
 
         # Create required directories
         mkdir -p "${DATA_DIR}/servers" "${DATA_DIR}/backups" "${DATA_DIR}/archives" "${DATA_DIR}/wings-logs" "${DATA_DIR}/tmp" 2>/dev/null || true

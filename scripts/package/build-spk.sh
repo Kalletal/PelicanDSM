@@ -108,6 +108,13 @@ create_package_content() {
         chmod 644 "${PKG_DIR}/app/images/"*.png
     fi
 
+    # Patched PHP files for Wings port 8445 default
+    if [ -d "${SPK_SRC}/patches" ]; then
+        mkdir -p "${PKG_DIR}/share/patches"
+        cp "${SPK_SRC}/patches/"*.php "${PKG_DIR}/share/patches/"
+        chmod 644 "${PKG_DIR}/share/patches/"*.php
+    fi
+
     log_success "Package content created"
 }
 

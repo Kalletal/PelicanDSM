@@ -133,23 +133,31 @@ fix_wings_config()
     if [ -f "${WINGS_CONFIG}" ]; then
         log "Applying Docker-in-Docker fixes to Wings config..."
 
-        # FIX 1: API Port - Panel generates 8445 (external) but container needs 8080 (internal)
-        sed -i 's/^\(\s*port:\s*\)8445\s*$/\18080/' "${WINGS_CONFIG}"
+        # FIX 1: API Port - Panel génère 8445 (externe) mais le conteneur écoute sur 8080 (interne)
+        sed -i 's/port: 8445$/port: 8080/' "${WINGS_CONFIG}"
 
         # FIX 2: System paths - Use host paths instead of container paths
+        # These patterns match any occurrence, regardless of indentation
         sed -i "s|/var/lib/pelican/volumes|${DATA_DIR}/servers|g" "${WINGS_CONFIG}"
         sed -i "s|/var/lib/pelican/backups|${DATA_DIR}/backups|g" "${WINGS_CONFIG}"
         sed -i "s|/var/lib/pelican/archives|${DATA_DIR}/archives|g" "${WINGS_CONFIG}"
         sed -i "s|/var/log/pelican|${DATA_DIR}/wings-logs|g" "${WINGS_CONFIG}"
 
-        # Fix root_directory if it points to container path
-        sed -i "s|^\(\s*root_directory:\s*\)/var/lib/pelican\s*$|\1${DATA_DIR}|" "${WINGS_CONFIG}"
+        # Fix root_directory - match with or without trailing content
+        sed -i "s|root_directory: /var/lib/pelican$|root_directory: ${DATA_DIR}|" "${WINGS_CONFIG}"
 
         # FIX 3: Disable mount_passwd - the passwd_file path doesn't exist on host
-        sed -i 's/^\(\s*mount_passwd:\s*\)true\s*$/\1false/' "${WINGS_CONFIG}"
+        sed -i 's/mount_passwd: true/mount_passwd: false/g' "${WINGS_CONFIG}"
 
         # FIX 4: tmp_directory - Must be a host path for install scripts
-        sed -i "s|^\(\s*tmp_directory:\s*\)/tmp/pelican\s*$|\1${DATA_DIR}/tmp|" "${WINGS_CONFIG}"
+        sed -i "s|tmp_directory: /tmp/pelican$|tmp_directory: ${DATA_DIR}/tmp|" "${WINGS_CONFIG}"
+
+        # FIX 5: Fix allowed_origins for WebSocket
+        # Replace empty array with wildcard
+        sed -i 's/allowed_origins: \[\]/allowed_origins:\n  - "*"/' "${WINGS_CONFIG}"
+
+        # FIX 6: Prevent Panel from overwriting our config fixes
+        sed -i 's/ignore_panel_config_updates: false/ignore_panel_config_updates: true/' "${WINGS_CONFIG}"
 
         # Create required directories
         mkdir -p "${DATA_DIR}/servers" "${DATA_DIR}/backups" "${DATA_DIR}/archives" "${DATA_DIR}/wings-logs" "${DATA_DIR}/tmp" 2>/dev/null || true
@@ -292,10 +300,64 @@ start_containers()
         log "Waiting for migrations to finish..."
         wait_for_migrations
 
+        # Patch is now applied via Docker volume mounts in compose.yaml
+        # No runtime patching needed
+
         log "Panel fully initialized - user should complete setup at /installer"
     ) >> "${LOG_FILE}" 2>&1 &
 
     return 0
+}
+
+# Patch the default Wings port in Panel source code
+# Copies pre-patched files from the package to the container
+fix_default_wings_port()
+{
+    CONTAINER_NAME="${PACKAGE}-panel-1"
+    PATCHES_DIR="${INSTALL_DIR}/share/patches"
+
+    log "Patching default Wings port (8080 -> 8445)..."
+
+    # Files to patch
+    NODE_MODEL="/var/www/html/app/Models/Node.php"
+    CREATE_NODE="/var/www/html/app/Filament/Admin/Resources/Nodes/Pages/CreateNode.php"
+    EDIT_NODE="/var/www/html/app/Filament/Admin/Resources/Nodes/Pages/EditNode.php"
+
+    # Check if patches exist
+    if [ ! -d "${PATCHES_DIR}" ]; then
+        log "Patches directory not found: ${PATCHES_DIR}"
+        return 1
+    fi
+
+    # Copy pre-patched Node.php
+    if [ -f "${PATCHES_DIR}/Node.php" ]; then
+        docker cp "${PATCHES_DIR}/Node.php" "${CONTAINER_NAME}:${NODE_MODEL}" 2>/dev/null
+        docker exec "${CONTAINER_NAME}" chown root:www-data "${NODE_MODEL}" 2>/dev/null
+        docker exec "${CONTAINER_NAME}" chmod 640 "${NODE_MODEL}" 2>/dev/null
+        log "Node.php patched"
+    fi
+
+    # Copy pre-patched CreateNode.php
+    if [ -f "${PATCHES_DIR}/CreateNode.php" ]; then
+        docker cp "${PATCHES_DIR}/CreateNode.php" "${CONTAINER_NAME}:${CREATE_NODE}" 2>/dev/null
+        docker exec "${CONTAINER_NAME}" chown root:www-data "${CREATE_NODE}" 2>/dev/null
+        docker exec "${CONTAINER_NAME}" chmod 640 "${CREATE_NODE}" 2>/dev/null
+        log "CreateNode.php patched"
+    fi
+
+    # Copy pre-patched EditNode.php
+    if [ -f "${PATCHES_DIR}/EditNode.php" ]; then
+        docker cp "${PATCHES_DIR}/EditNode.php" "${CONTAINER_NAME}:${EDIT_NODE}" 2>/dev/null
+        docker exec "${CONTAINER_NAME}" chown root:www-data "${EDIT_NODE}" 2>/dev/null
+        docker exec "${CONTAINER_NAME}" chmod 640 "${EDIT_NODE}" 2>/dev/null
+        log "EditNode.php patched"
+    fi
+
+    # Clear cache
+    docker exec "${CONTAINER_NAME}" php /var/www/html/artisan cache:clear 2>/dev/null
+    docker exec "${CONTAINER_NAME}" php /var/www/html/artisan view:clear 2>/dev/null
+
+    log "Wings port patch complete"
 }
 
 stop_containers()
@@ -341,6 +403,20 @@ case "$1" in
         fix_wings_config  # Apply Docker-in-Docker fixes before starting
         start_containers
         start_wings
+
+        # Apply Wings config fixes AFTER containers start (in background)
+        # The Panel may update Wings config on startup, so we fix it after a delay
+        (
+            sleep 30  # Wait for Wings to connect to Panel and receive config
+            if [ -f "${WINGS_CONFIG}" ]; then
+                log "Re-applying Wings config fixes after startup..."
+                fix_wings_config
+                # Restart Wings to apply changes
+                docker restart pelican_panel-wings-1 >> "${LOG_FILE}" 2>&1 || true
+                log "Wings restarted with corrected config"
+            fi
+        ) >> "${LOG_FILE}" 2>&1 &
+
         exit 0
         ;;
     stop)
