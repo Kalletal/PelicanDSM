@@ -1,6 +1,6 @@
 SPK_NAME = pelican_panel
 SPK_VERS = 1.0.0
-SPK_REV = 110
+SPK_REV = 112
 SPK_ICON = src/pelican.png
 DSM_UI_DIR = app
 
@@ -52,6 +52,8 @@ pelican_extra_install:
 	install -d -m 0755 $(STAGING_DIR)/bin
 	install -m 0644 src/loading.html $(STAGING_DIR)/share/loading.html
 	install -m 0755 src/loading-server.sh $(STAGING_DIR)/bin/loading-server.sh
+	# Wings config watcher daemon
+	install -m 0755 src/wings-config-watcher.sh $(STAGING_DIR)/bin/wings-config-watcher.sh
 	# Patched PHP files (Wings port 8445 default)
 	install -d -m 0755 $(STAGING_DIR)/share/patches
 	install -m 0644 src/patches/Node.php $(STAGING_DIR)/share/patches/Node.php

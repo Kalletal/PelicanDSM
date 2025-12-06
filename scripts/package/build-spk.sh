@@ -82,6 +82,10 @@ create_package_content() {
     chmod +x "${PKG_DIR}/bin/loading-server.sh"
     chmod +x "${PKG_DIR}/bin/loading-proxy.py"
 
+    # Wings config watcher daemon (auto-fixes config when Panel modifies it)
+    cp "${SPK_SRC}/wings-config-watcher.sh" "${PKG_DIR}/bin/"
+    chmod +x "${PKG_DIR}/bin/wings-config-watcher.sh"
+
     # DSM UI config - must be readable by DSM (644 permissions)
     cp "${SPK_SRC}/app/config" "${PKG_DIR}/app/"
     chmod 644 "${PKG_DIR}/app/config"

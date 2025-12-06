@@ -21,6 +21,10 @@ LOADING_PROXY="${INSTALL_DIR}/bin/loading-proxy.py"
 LOADING_HTML="${INSTALL_DIR}/share/loading.html"
 PROXY_PID_FILE="${VAR_DIR}/loading-proxy.pid"
 
+# Wings config watcher
+WATCHER_SCRIPT="${INSTALL_DIR}/bin/wings-config-watcher.sh"
+WATCHER_PID_FILE="${VAR_DIR}/wings-watcher.pid"
+
 # Ports
 PANEL_PORT="8080"           # Public port (served by proxy)
 PANEL_INTERNAL_PORT="8090"  # Internal Docker port
@@ -98,6 +102,56 @@ stop_loading_proxy()
 proxy_running()
 {
     [ -f "${PROXY_PID_FILE}" ] && kill -0 "$(cat "${PROXY_PID_FILE}" 2>/dev/null)" 2>/dev/null
+}
+
+# Start the Wings config watcher daemon
+start_watcher()
+{
+    if [ ! -f "${WATCHER_SCRIPT}" ]; then
+        log "Wings config watcher script not found at ${WATCHER_SCRIPT}"
+        return 1
+    fi
+
+    # Stop any existing watcher
+    stop_watcher
+
+    log "Starting Wings config watcher daemon..."
+    sh "${WATCHER_SCRIPT}" &
+
+    sleep 1
+    if [ -f "${WATCHER_PID_FILE}" ]; then
+        WATCHER_PID=$(cat "${WATCHER_PID_FILE}" 2>/dev/null)
+        if kill -0 "${WATCHER_PID}" 2>/dev/null; then
+            log "Wings config watcher started (PID: ${WATCHER_PID})"
+            return 0
+        fi
+    fi
+    log "Warning: Wings config watcher may not have started correctly"
+    return 1
+}
+
+# Stop the Wings config watcher daemon
+stop_watcher()
+{
+    if [ -f "${WATCHER_PID_FILE}" ]; then
+        PID=$(cat "${WATCHER_PID_FILE}" 2>/dev/null)
+        if [ -n "${PID}" ] && kill -0 "${PID}" 2>/dev/null; then
+            log "Stopping Wings config watcher (PID: ${PID})"
+            kill "${PID}" 2>/dev/null
+            sleep 1
+            kill -9 "${PID}" 2>/dev/null
+        fi
+        rm -f "${WATCHER_PID_FILE}"
+    fi
+
+    # Kill any remaining watcher processes
+    pkill -f "wings-config-watcher.sh" 2>/dev/null || true
+}
+
+# Check if watcher is running
+watcher_running()
+{
+    [ -f "${WATCHER_PID_FILE}" ] && kill -0 "$(cat "${WATCHER_PID_FILE}" 2>/dev/null)" 2>/dev/null
 }
 
 ensure_port_free()
@@ -404,24 +458,16 @@ case "$1" in
         start_containers
         start_wings
 
-        # Apply Wings config fixes AFTER containers start (in background)
-        # The Panel may update Wings config on startup, so we fix it after a delay
-        (
-            sleep 30  # Wait for Wings to connect to Panel and receive config
-            if [ -f "${WINGS_CONFIG}" ]; then
-                log "Re-applying Wings config fixes after startup..."
-                fix_wings_config
-                # Restart Wings to apply changes
-                docker restart pelican_panel-wings-1 >> "${LOG_FILE}" 2>&1 || true
-                log "Wings restarted with corrected config"
-            fi
-        ) >> "${LOG_FILE}" 2>&1 &
+        # Start the Wings config watcher daemon
+        # This monitors config.yml and automatically applies fixes when Panel modifies it
+        start_watcher
 
         exit 0
         ;;
     stop)
         echo "Arrêt de ${DNAME}"
         log "Stopping ${DNAME}"
+        stop_watcher
         stop_wings
         stop_loading_proxy
         stop_containers
